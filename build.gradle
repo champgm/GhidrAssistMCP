@@ -58,3 +58,126 @@ dependencies {
 
 // Exclude additional files from the built extension
 // Ex: buildExtension.exclude '.idea/**'
+
+// --- Fast dev: install the built extension into the user's Extensions dir ---
+def resolveGhidraUserExtensionsDir = {
+	File ghidraUserRoot
+	if (org.gradle.internal.os.OperatingSystem.current().isWindows()) {
+		def appData = System.getenv('APPDATA')
+		if (appData) {
+			ghidraUserRoot = new File(appData, 'ghidra')
+		}
+	}
+	if (ghidraUserRoot == null) {
+		def userHome = System.properties['user.home']
+		ghidraUserRoot = new File(userHome, '.ghidra')
+	}
+	if (!ghidraUserRoot.exists()) {
+		return null
+	}
+
+	// Try to match the .ghidra_<version> directory that corresponds to the GHIDRA_INSTALL_DIR version
+	def desiredVersion = null
+	def desiredRelease = null
+	def appProps = new File(ghidraInstallDir, "Ghidra/application.properties")
+	if (appProps.exists()) {
+		def p = new Properties()
+		appProps.withInputStream { p.load(it) }
+		desiredVersion = p.getProperty('application.version')
+		desiredRelease = p.getProperty('application.release.name', 'PUBLIC')
+	}
+
+	File versionDir = null
+	def candidatesArray = ghidraUserRoot.listFiles(new FileFilter() {
+		@Override
+		boolean accept(File f) {
+			return f.isDirectory() && (f.name.startsWith('ghidra_') || f.name.startsWith('.ghidra_'))
+		}
+	})
+	def candidates = candidatesArray ? candidatesArray.toList() : []
+
+	if (desiredVersion) {
+		def matched = candidates.findAll { it.name.toLowerCase().contains(desiredVersion.toLowerCase()) }
+		if (!matched.isEmpty()) {
+			versionDir = matched.sort { a, b -> b.lastModified() <=> a.lastModified() }.first()
+		}
+	}
+	if (versionDir == null && !candidates.isEmpty()) {
+		versionDir = candidates.sort { a, b -> b.lastModified() <=> a.lastModified() }.first()
+	}
+	return versionDir ? new File(versionDir, 'Extensions') : null
+}
+
+task devInstall {
+	group = "Ghidra"
+	description = "Builds and stages the extension ZIP into the install Extensions/Ghidra directory with a stable name."
+	dependsOn 'buildExtension'
+	doLast {
+		def distDir = file("${projectDir}/dist")
+		def zipSet = fileTree(distDir) { include '*.zip' }.files
+		def zipFiles = zipSet ? zipSet.toList() : []
+		if (!zipFiles || zipFiles.size() == 0) {
+			throw new GradleException("No extension zip found in ${distDir}. Did buildExtension run?")
+		}
+		def zipFile = zipFiles.sort { a, b -> b.lastModified() <=> a.lastModified() }.first()
+
+		def installDir = file("${ghidraInstallDir}/Extensions/Ghidra")
+		installDir.mkdirs()
+		def stableName = "GhidrAssistMCP.zip"
+		copy {
+			from zipFile
+			into installDir
+			rename { stableName }
+		}
+		println "Staged ${zipFile.name} to ${installDir}/${stableName}"
+	}
+}
+
+task runGhidra(type: Exec) {
+	group = "Ghidra"
+	description = "Runs Ghidra after installing the extension."
+	dependsOn 'devInstall'
+	if (org.gradle.internal.os.OperatingSystem.current().isWindows()) {
+		commandLine "${ghidraInstallDir}\\ghidraRun.bat"
+	} else {
+		commandLine "${ghidraInstallDir}/ghidraRun"
+	}
+}
+
+task devInstallUser {
+	group = "Ghidra"
+	description = "Builds and installs the extension into the user's Extensions/Ghidra directory for immediate loading."
+	dependsOn 'buildExtension'
+	doLast {
+		def userExtensionsDir = resolveGhidraUserExtensionsDir()
+		if (!userExtensionsDir) {
+			throw new GradleException("Could not resolve user's Ghidra Extensions directory. Launch Ghidra once, then retry.")
+		}
+		userExtensionsDir.mkdirs()
+
+		def distDir = file("${projectDir}/dist")
+		def zipSet = fileTree(distDir) { include '*.zip' }.files
+		def zipFiles = zipSet ? zipSet.toList() : []
+		if (!zipFiles || zipFiles.size() == 0) {
+			throw new GradleException("No extension zip found in ${distDir}. Did buildExtension run?")
+		}
+		def zipFile = zipFiles.sort { a, b -> b.lastModified() <=> a.lastModified() }.first()
+
+		copy {
+			from zipTree(zipFile)
+			into userExtensionsDir
+		}
+		println "Installed ${zipFile.name} into ${userExtensionsDir}"
+	}
+}
+
+task runGhidraUser(type: Exec) {
+	group = "Ghidra"
+	description = "Installs into user dir and launches Ghidra."
+	dependsOn 'devInstallUser'
+	if (org.gradle.internal.os.OperatingSystem.current().isWindows()) {
+		commandLine "${ghidraInstallDir}\\ghidraRun.bat"
+	} else {
+		commandLine "${ghidraInstallDir}/ghidraRun"
+	}
+}
