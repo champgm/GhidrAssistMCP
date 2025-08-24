@@ -13,6 +13,13 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import ghidra.program.model.listing.Program;
 import ghidra.util.Msg;
 import ghidrassistmcp.tools.AutoCreateStructTool;
+import ghidrassistmcp.tools.CreateStructureTool;
+import ghidrassistmcp.tools.AddStructureFieldTool;
+import ghidrassistmcp.tools.RemoveStructureFieldTool;
+import ghidrassistmcp.tools.ListDataTypesTool;
+import ghidrassistmcp.tools.GetDataTypeTool;
+import ghidrassistmcp.tools.CreateDataTypeCategoryTool;
+import ghidrassistmcp.tools.SearchDataTypesTool;
 import ghidrassistmcp.tools.DecompileFunctionTool;
 import ghidrassistmcp.tools.DisassembleFunctionTool;
 import ghidrassistmcp.tools.FunctionXrefsTool;
@@ -89,6 +96,13 @@ public class GhidrAssistMCPBackend implements McpBackend {
         registerTool(new SetFunctionPrototypeTool());
         registerTool(new SetLocalVariableTypeTool());
         registerTool(new AutoCreateStructTool());
+        registerTool(new CreateStructureTool());
+        registerTool(new AddStructureFieldTool());
+        registerTool(new RemoveStructureFieldTool());
+        registerTool(new ListDataTypesTool());
+        registerTool(new GetDataTypeTool());
+        registerTool(new CreateDataTypeCategoryTool());
+        registerTool(new SearchDataTypesTool());
         
         Msg.info(this, "GhidrAssistMCP Backend initialized with " + tools.size() + " tools");
     }
